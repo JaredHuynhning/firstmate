@@ -112,7 +112,7 @@
 #     __PIWATCH__   absolute path to .pi/extensions/fm-primary-pi-watch.ts in a pi secondmate home
 #     __OPINPUT__   absolute path to the canonical operational-input encoder
 # Verified per-harness turn-end hooks are installed automatically where enabled; some live outside the worktree.
-# A harness-neutral ship scaffold is rendered into a per-launch task-temp copy after harness resolution; harness-adapters owns exact no-mistakes forms, and an unreadable or unmatched form falls back to natural language.
+# A harness-neutral ship scaffold is rendered into a per-launch owner-only state/<id>.launch-brief.md after harness resolution; harness-adapters owns exact no-mistakes forms, an unreadable or unmatched form falls back to natural language, and a no-mistakes ship brief that carries the validation contract without the token is refused rather than launched with a hand-written form.
 # Kimi uses one surgically installed Firstmate region in $HOME/.kimi-code/config.toml,
 # a firstmate-owned global hook and registry, and a gitignored per-task pointer.
 # grok uses a firstmate-owned global hook under ${GROK_HOME:-$HOME/.grok}/hooks
@@ -610,12 +610,35 @@ no_mistakes_invocation_for_harness() {  # <harness>
 }
 
 render_launch_brief_for_harness() {  # <source> <destination> <harness>
-  local source=$1 destination=$2 harness=$3 invocation
+  local source=$1 destination=$2 harness=$3 invocation old_umask
   invocation=$(no_mistakes_invocation_for_harness "$harness")
+  # The rendered brief is agent instruction text read straight back into the
+  # launch command, so it is written owner-only inside the firstmate home. A
+  # predictable world-readable temp path would let any local user read the task
+  # or pre-plant a symlink at the destination this write follows.
+  rm -f "$destination"
+  old_umask=$(umask)
+  umask 077
   awk -v replacement="$invocation" '{
     gsub(/__FM_NO_MISTAKES_INVOCATION__/, replacement)
     print
   }' "$source" > "$destination"
+  umask "$old_umask"
+}
+
+# The launch-time token is the whole contract: only harness-adapters may decide a
+# concrete no-mistakes invocation, so a no-mistakes ship brief that carries the
+# validation instructions without the token has had that decision made somewhere
+# else, by hand. Match the fm-brief.sh-owned guidance line, plus a bare
+# harness-specific form left in the token's place; a path component merely
+# containing the word is not an invocation.
+brief_carries_no_mistakes_validation() {  # <brief>
+  local brief=$1
+  if grep -qF 'You drive no-mistakes by responding to its gates' "$brief"; then
+    return 0
+  fi
+  # shellcheck disable=SC2016 # The prefixes are literal harness invocation syntax, not expansions.
+  grep -qE '(^|[[:space:]`(])[/$]no-mistakes([[:space:]`).,;:]|$)' "$brief"
 }
 
 resolve_kimi_binary() {
@@ -895,6 +918,50 @@ BRIEF_REAL="$BRIEF_DIR_REAL/$(basename "$BRIEF")"
 # once here so every downstream comparison uses the same physical form
 # (docs/herdr-backend.md "Known gaps").
 PROJ_ABS_REAL=$(cd "$PROJ_ABS" 2>/dev/null && pwd -P) || PROJ_ABS_REAL="$PROJ_ABS"
+
+# Per-project delivery mode + yolo flag (bin/fm-project-mode.sh; the project-management skill and AGENTS.md task lifecycle).
+# Recorded in meta below so fm-teardown's safety check and the validate/merge stages can
+# branch on them. Mode governs ship tasks; a scout's deliverable is a report, not a
+# merge, so scout teardown ignores mode. Resolved here rather than at the meta write
+# because the launch brief's mode-specific contract is checked before this spawn
+# creates a window or a worktree, so a refusal leaves nothing behind.
+SECONDMATE_PROJECTS=
+if [ "$KIND" = secondmate ]; then
+  MODE=secondmate
+  YOLO=off
+  SECONDMATE_PROJECTS=$(secondmate_registry_value "$ID" projects || true)
+else
+  PROJ_NAME=$(basename "$PROJ_ABS")
+  read -r MODE YOLO <<EOF
+$("$FM_ROOT/bin/fm-project-mode.sh" "$PROJ_NAME")
+EOF
+fi
+
+mkdir -p "$STATE"
+STATE_REAL=$(cd "$STATE" && pwd -P)
+
+# The scaffold is deliberately harness-neutral because the concrete adapter is
+# resolved only here. Render a per-launch copy after that resolution, deriving
+# exact invocation facts from harness-adapters and falling back to wording that
+# every harness can follow. The source brief stays reusable across a respawn on
+# a different adapter. The token is therefore load-bearing at launch, not
+# decoration: a no-mistakes ship brief that lost it would ship whichever form
+# was written in its place, which is the guess this rendering exists to remove,
+# so that case refuses instead of silently skipping the rendering.
+if grep -qF '__FM_NO_MISTAKES_INVOCATION__' "$BRIEF_REAL"; then
+  LAUNCH_BRIEF="$STATE_REAL/$ID.launch-brief.md"
+  render_launch_brief_for_harness "$BRIEF_REAL" "$LAUNCH_BRIEF" "$HARNESS"
+  if grep -qF '__FM_NO_MISTAKES_INVOCATION__' "$LAUNCH_BRIEF"; then
+    echo "error: harness-specific launch brief rendering left an unresolved no-mistakes invocation" >&2
+    exit 1
+  fi
+  BRIEF="$LAUNCH_BRIEF"
+  BRIEF_REAL="$LAUNCH_BRIEF"
+elif [ "$KIND" = ship ] && [ "$MODE" = no-mistakes ] \
+     && brief_carries_no_mistakes_validation "$BRIEF_REAL"; then
+  echo "error: task $ID: the no-mistakes ship brief at $BRIEF_REAL carries the validation contract but no __FM_NO_MISTAKES_INVOCATION__ token, so the invocation form for harness '$HARNESS' cannot be rendered and the brief would ship a hand-written guess; restore the token (bin/fm-brief.sh scaffolds it, .agents/skills/harness-adapters owns the forms it resolves to) and respawn" >&2
+  exit 1
+fi
 
 real_path_or_raw() {  # <path>
   local path=$1 real
@@ -1386,28 +1453,10 @@ fi
 TASK_TMP="/tmp/fm-$ID"
 mkdir -p "$TASK_TMP/gotmp"
 
-# The scaffold is deliberately harness-neutral because the concrete adapter is
-# resolved only here. Render a per-launch copy after that resolution, deriving
-# exact invocation facts from harness-adapters and falling back to wording that
-# every harness can follow. The source brief stays reusable across a respawn on
-# a different adapter.
-if grep -qF '__FM_NO_MISTAKES_INVOCATION__' "$BRIEF_REAL"; then
-  LAUNCH_BRIEF="$TASK_TMP/brief.md"
-  render_launch_brief_for_harness "$BRIEF_REAL" "$LAUNCH_BRIEF" "$HARNESS"
-  if grep -qF '__FM_NO_MISTAKES_INVOCATION__' "$LAUNCH_BRIEF"; then
-    echo "error: harness-specific launch brief rendering left an unresolved no-mistakes invocation" >&2
-    exit 1
-  fi
-  BRIEF="$LAUNCH_BRIEF"
-  BRIEF_REAL="$LAUNCH_BRIEF"
-fi
-
 # Per-harness turn-end hook where enabled: a file that touches
 # state/<id>.turn-ended when the agent finishes a turn. Worktree-resident hooks
 # and token pointers stay out of git's view so they never block teardown's dirty
 # check or leak into a commit.
-mkdir -p "$STATE"
-STATE_REAL=$(cd "$STATE" && pwd -P)
 TURNEND="$STATE_REAL/$ID.turn-ended"
 exclude_path() {
   local rel=$1 EXCL
@@ -1635,22 +1684,6 @@ EOF
       exclude_path '.fm-kimi-turnend'
       ;;
   esac
-fi
-
-# Per-project delivery mode + yolo flag (bin/fm-project-mode.sh; the project-management skill and AGENTS.md task lifecycle).
-# Recorded in meta so fm-teardown's safety check and the validate/merge stages can
-# branch on them. Mode governs ship tasks; a scout's deliverable is a report, not a
-# merge, so scout teardown ignores mode.
-SECONDMATE_PROJECTS=
-if [ "$KIND" = secondmate ]; then
-  MODE=secondmate
-  YOLO=off
-  SECONDMATE_PROJECTS=$(secondmate_registry_value "$ID" projects || true)
-else
-  PROJ_NAME=$(basename "$PROJ_ABS")
-  read -r MODE YOLO <<EOF
-$("$FM_ROOT/bin/fm-project-mode.sh" "$PROJ_NAME")
-EOF
 fi
 
 META_WINDOW=$T

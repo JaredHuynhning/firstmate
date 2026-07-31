@@ -121,6 +121,19 @@ launched_brief_path() {
   sed -n "s/.*encode launch-brief < '\([^']*\)'.*/\1/p" "$1" | tail -1
 }
 
+# Resolve the harness-neutral token in the durable brief exactly the way an agent
+# editing the same file to fill {TASK} would, so the spawn sees a brief that still
+# reads as finished prose but carries a guessed invocation form.
+resolve_brief_token_by_hand() {
+  local brief=$1 replacement=$2 rendered
+  rendered="$brief.byhand"
+  awk -v replacement="$replacement" '{
+    gsub(/__FM_NO_MISTAKES_INVOCATION__/, replacement)
+    print
+  }' "$brief" > "$rendered"
+  mv "$rendered" "$brief"
+}
+
 test_claude_launch_brief_uses_slash_no_mistakes_invocation() {
   local rec id out status brief
   id=profile-brief-claude-z1e
@@ -181,6 +194,26 @@ test_opencode_launch_brief_uses_harness_agnostic_no_mistakes_wording() {
   assert_no_grep '/no-mistakes' "$brief" \
     "opencode launch brief guessed the slash invocation"
   pass "opencode launch receives a generated brief with natural-language validation wording"
+}
+
+test_hand_resolved_ship_brief_refuses_launch() {
+  local rec id out status
+  id=profile-brief-byhand-z1h
+  rec=$(make_spawn_case profile-brief-byhand codex "$id")
+  read_case_record "$rec"
+  generate_ship_brief "$HOME_DIR" "$id" project
+  # shellcheck disable=SC2016 # The backticked skill form is literal brief text.
+  resolve_brief_token_by_hand "$HOME_DIR/data/$id/brief.md" '`/no-mistakes`'
+
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 1 "$status" \
+    "a no-mistakes ship brief whose invocation token was resolved by hand should refuse launch"
+  assert_contains "$out" "$id" "the refusal did not name the task"
+  assert_contains "$out" "__FM_NO_MISTAKES_INVOCATION__" "the refusal did not name the missing token"
+  assert_not_contains "$(cat "$LAUNCH_LOG")" 'encode launch-brief' \
+    "the refused spawn still launched the harness with the hand-resolved brief"
+  pass "a no-mistakes ship brief missing the invocation token refuses launch"
 }
 
 test_no_profile_keeps_claude_profile_defaults() {
@@ -744,6 +777,7 @@ test_no_profile_keeps_claude_profile_defaults
 test_claude_launch_brief_uses_slash_no_mistakes_invocation
 test_opencode_launch_brief_uses_harness_agnostic_no_mistakes_wording
 test_codex_launch_brief_uses_dollar_no_mistakes_invocation
+test_hand_resolved_ship_brief_refuses_launch
 test_relative_home_overrides_launch_with_absolute_cross_process_paths
 test_home_defaults_preserve_absolute_or_resolve_relative_paths
 test_absolute_override_spelling_is_preserved_in_launch_paths
