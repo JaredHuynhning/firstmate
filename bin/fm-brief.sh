@@ -33,6 +33,14 @@
 #   direct-PR    implement -> push + open PR via gh-axi (no pipeline) -> captain merge
 #   local-only   implement on branch, stop and report "ready in branch" (no push/PR);
 #                captain approves, firstmate merges to local main
+# The no-mistakes definition of done keeps the validation invocation as the
+# harness-neutral __FM_NO_MISTAKES_INVOCATION__ token, because only the harness a
+# task is actually launched on decides the concrete form. bin/fm-spawn.sh renders
+# a per-launch copy of the brief from the forms owned by
+# .agents/skills/harness-adapters and falls back to natural-language wording when
+# no exact form applies. Keep the token verbatim while filling {TASK}: a
+# no-mistakes ship brief that carries the validation contract with the token
+# resolved by hand refuses to launch rather than shipping a guessed form.
 # Ship briefs begin with a worktree-isolation assertion before the branch step.
 # Scout tasks ignore mode - their deliverable is a report, not a merge.
 # Every scaffold's status protocol distinguishes the configured
