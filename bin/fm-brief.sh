@@ -29,7 +29,7 @@
 # For ship tasks, the definition of done is shaped by the project's delivery mode
 # (data/projects.md via fm-project-mode.sh; see the project-management skill
 # and AGENTS.md task lifecycle):
-#   no-mistakes  implement -> /no-mistakes pipeline -> PR -> captain merge (default)
+#   no-mistakes  implement -> harness-specific validation invocation -> PR -> captain merge (default)
 #   direct-PR    implement -> push + open PR via gh-axi (no pipeline) -> captain merge
 #   local-only   implement on branch, stop and report "ready in branch" (no push/PR);
 #                captain approves, firstmate merges to local main
@@ -311,7 +311,7 @@ case "$MODE" in
 This project ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
 The task is complete only when committed on your branch.
 When it is implemented and committed, push your branch and open a PR with \`gh-axi\`, then append \`done: PR {url}\` to the status file and stop.
-Do NOT run /no-mistakes. The configured merge authority decides whether to merge the PR; firstmate relays the outcome.
+Do NOT invoke the no-mistakes skill. The configured merge authority decides whether to merge the PR; firstmate relays the outcome.
 EOF
     ;;
   local-only)
@@ -334,10 +334,10 @@ EOF
 # Definition of done
 The task is complete only when committed on your branch.
 When you believe it is complete, append \`done: {summary}\` to the status file and stop.
-Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
+Firstmate will then instruct you to invoke __FM_NO_MISTAKES_INVOCATION__ to validate and ship a PR.
 
 You drive no-mistakes by responding to its gates, not by implementing fixes.
-Follow the guidance no-mistakes itself provides for the mechanics: it loads when you invoke /no-mistakes, and \`no-mistakes axi run --help\` plus the \`help\` lines in each \`axi\` response are authoritative and version-matched to the installed binary.
+Follow the guidance no-mistakes itself provides for the mechanics: it loads when you invoke __FM_NO_MISTAKES_INVOCATION__, and \`no-mistakes axi run --help\` plus the \`help\` lines in each \`axi\` response are authoritative and version-matched to the installed binary.
 Do not hand-edit, commit, or fix findings yourself while a run is active - the pipeline applies every fix.
 
 Two firstmate-specific rules layer on top of that guidance:
@@ -346,7 +346,7 @@ Two firstmate-specific rules layer on top of that guidance:
   When the decision comes back, feed it to the gate with \`no-mistakes axi respond\` and let the pipeline apply it - do not route the question to "the user" or implement the fix yourself.
 - Avoid \`--yes\`: it would silently bypass firstmate's authority check and any required captain escalation.
 
-After /no-mistakes reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), append \`done: PR {url} checks green\` and stop. You are finished.
+After __FM_NO_MISTAKES_INVOCATION__ reports CI green (the CI-ready return point - do not wait for it to keep monitoring in the background until merge), append \`done: PR {url} checks green\` and stop. You are finished.
 EOF
     ;;
 esac
