@@ -188,6 +188,10 @@
       "audience": "maintainer-architecture"
     },
     {
+      "path": "HANDOVER.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": "README.md",
       "audience": "public-product"
     },
